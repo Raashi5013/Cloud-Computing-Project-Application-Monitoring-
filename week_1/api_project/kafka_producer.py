@@ -1,50 +1,42 @@
 from kafka import KafkaProducer
 import json
 import time
+from datetime import datetime
 
 def create_producer():
-    # Add retry mechanism
     for i in range(5):
         try:
             producer = KafkaProducer(
                 bootstrap_servers='kafka:9092',
                 value_serializer=lambda v: json.dumps(v).encode('utf-8')
             )
-            print("Successfully connected to Kafka")
+            print("Connected to Kafka successfully.")
             return producer
         except Exception as e:
-            print(f"Failed to connect to Kafka (attempt {i+1}/5): {e}")
-            if i < 4:  # Don't sleep on the last attempt
-                time.sleep(10)
-    
+            print(f"Attempt {i+1}: Failed to connect to Kafka: {e}")
+            time.sleep(5)
     raise Exception("Could not connect to Kafka after multiple attempts")
 
-def send_log_to_kafka(producer, log_data):
+producer = create_producer()
+
+def log_to_kafka(topic, log_type, method=None, endpoint=None, status=None,
+                 response_time_ms=None, query=None, data=None, error_type=None, message=None):
+    log_data = {
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "log_type": log_type,
+        "method": method or None,
+        "endpoint": endpoint or None,
+        "status": status,
+        "response_time_ms": response_time_ms,
+        "query": query,
+        "data": data,
+        "error_type": error_type,
+        "message": message
+    }
+
     try:
-        producer.send('logs', value=log_data)
+        producer.send(topic, value=log_data)
         producer.flush()
-        print("Log sent to Kafka:", log_data)
+        print(f"Log sent to Kafka topic '{topic}':", log_data)
     except Exception as e:
-        print(f"Error sending log to Kafka: {e}")
-
-# Simulate log generation
-def generate_logs():
-    logs = [
-        {"level": "INFO", "message": "API started successfully"},
-        {"level": "ERROR", "message": "Error processing request"},
-        {"level": "INFO", "message": "Resource created"}
-    ]
-    
-    # Wait for Kafka to start up
-    print("Waiting for Kafka to start...")
-    time.sleep(30)
-    
-    producer = create_producer()
-    
-    while True:
-        for log in logs:
-            send_log_to_kafka(producer, log)
-            time.sleep(5)  # Simulate log generation every 5 seconds
-
-if __name__ == "__main__":
-    generate_logs()
+        print("Error sending log to Kafka:", e)

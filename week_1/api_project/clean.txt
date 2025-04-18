@@ -1,3 +1,0 @@
-docker-compose down
-docker system prune -f  # clean up any unused images
-docker-compose up --build
