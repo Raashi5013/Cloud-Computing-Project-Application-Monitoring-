@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.2
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - app-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.2
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:13
+    container_name: postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: logdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  flask-api:
+    build:
+      context: ./api_project
+    container_name: flask-api
+    command: ["python", "app.py"]
+    ports:
+      - "5000:5000"
+    depends_on:
+      - kafka
+    networks:
+      - app-network
+
+  simulate-client:
+    build:
+      context: ./api_project
+    container_name: simulate-client
+    command: ["python", "simulate_requests.py"]
+    depends_on:
+      - flask-api
+    networks:
+      - app-network
+
+  kafka-consumer:
+    build:
+      context: ./api_project
+    container_name: kafka-consumer
+    command: >
+      sh -c "python init_db.py && python kafka_consumer.py"
+    depends_on:
+      - kafka
+      - postgres
+    networks:
+      - app-network
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - postgres
+    networks:
+      - app-network
+    volumes:
+      - grafana-storage:/var/lib/grafana
+
+volumes:
+  postgres-data:
+  grafana-storage:
+
+networks:
+  app-network:
+    driver: bridge
